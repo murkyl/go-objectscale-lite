@@ -111,16 +111,17 @@ type ObjectScaleListIAMUserGroup struct {
 // The URN format looks like: urn:ecs:service::namespace:resource-type/resource-id
 // An example URL for ObjectScale: urn:ecs:iam:::policy/NameOfAPolicy
 // The first format is a string that is already in the urn format and that string is returned
-// The second is just the policy name where the URN will be created and returned
+// The second supports a simple string that for policies in the Global/System context
+// Policies in a specific namespace can be used with the format namespace:policyName
 func GetURNPolicyFromString(data string) string {
 	if strings.HasPrefix(data, "urn:") {
 		return data
 	}
-	arnParts := strings.Split(data, ":")
+	urnParts := strings.Split(data, ":")
 	ns := ""
-	if len(arnParts) > 1 {
-		ns = arnParts[0]
-		data = arnParts[1]
+	if len(urnParts) > 1 {
+		ns = urnParts[0]
+		data = urnParts[1]
 	}
 	return fmt.Sprintf("urn:ecs:iam::%s:policy/%s", ns, data)
 }
@@ -144,7 +145,7 @@ func (conn *ObjectScaleConn) Connect(cfg *ObjectScaleCfg) error {
 		log.Print(fmt.Sprintf("[Connect] Unable to connect to API endpoint: %s\n", err))
 		return err
 	}
-	log.Print(fmt.Sprintf("[Connect] Connected to with session ID: %s", conn.SessionToken))
+	log.Print(fmt.Sprintf("[Connect] Connected with session ID: %s", conn.SessionToken))
 	return nil
 }
 
