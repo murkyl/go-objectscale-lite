@@ -39,115 +39,6 @@ type ObjectScaleListIAMPolicy struct {
 	Policies []ObjectScaleIAMPolicy
 }
 
-// ListIAMPolicies returns a list of policies
-func (conn *ObjectScaleConn) ListIAMPolicies(ns string, qParams *ObjectScaleQueryParams) (*ObjectScaleListIAMPolicy, error) {
-	query := map[string]string{
-		apiOpAction: "ListPolicies",
-	}
-	if qParams != nil {
-		if qParams.Marker != "" {
-			query["Marker"] = qParams.Marker
-		}
-		if qParams.MaxItems != 0 {
-			query["MaxItems"] = fmt.Sprintf("%d", qParams.MaxItems)
-		}
-		if qParams.PathPrefix != "" {
-			query["PathPrefix"] = qParams.PathPrefix
-		}
-		query["OnlyAttached"] = fmt.Sprintf("%t", qParams.OnlyAttached)
-		if qParams.PolicyUsageFilter != "" {
-			query["PolicyUsageFilter"] = qParams.PolicyUsageFilter
-		}
-		if qParams.PolicyScope != "" {
-			query["PolicyScope"] = qParams.PolicyScope
-		}
-	}
-	jsonObj, err := conn.Send(
-		"POST",
-		apiPathIAM,
-		query,                                  // query
-		nil,                                    // body
-		map[string]string{apiHdrNamespace: ns}, // extra headers
-	)
-	if err != nil {
-		return nil, err
-	}
-	var result struct{ ListPoliciesResult ObjectScaleListIAMPolicy }
-	if err = mapstructure.Decode(jsonObj, &result); err != nil {
-		return nil, err
-	}
-	return &result.ListPoliciesResult, nil
-}
-
-// ListIAMUserPolicies returns a list of user policies
-func (conn *ObjectScaleConn) ListIAMUserPolicies(ns string, userName string, qParams *ObjectScaleQueryParams) (*ObjectScaleListIAMUserPolicies, error) {
-	query := map[string]string{
-		apiOpAction:   "ListUserPolicies",
-		apiOpUserName: userName,
-	}
-	if qParams != nil {
-		if qParams.Marker != "" {
-			query["Marker"] = qParams.Marker
-		}
-		if qParams.MaxItems != 0 {
-			query["MaxItems"] = fmt.Sprintf("%d", qParams.MaxItems)
-		}
-	}
-	jsonObj, err := conn.Send(
-		"POST",
-		apiPathIAM,
-		query,                                  // query
-		nil,                                    // body
-		map[string]string{apiHdrNamespace: ns}, // extra headers
-	)
-	if err != nil {
-		return nil, err
-	}
-	var result struct {
-		ListUserPoliciesResult ObjectScaleListIAMUserPolicies
-	}
-	if err = mapstructure.Decode(jsonObj, &result); err != nil {
-		return nil, err
-	}
-	return &result.ListUserPoliciesResult, nil
-}
-
-// ListIAMAttachedUserPolicies returns a list of policies that are attached to a user
-func (conn *ObjectScaleConn) ListIAMAttachedUserPolicies(ns string, userName string, qParams *ObjectScaleQueryParams) (*ObjectScaleListIAMAttachedUserPolicies, error) {
-	query := map[string]string{
-		apiOpAction:   "ListAttachedUserPolicies",
-		apiOpUserName: userName,
-	}
-	if qParams != nil {
-		if qParams.Marker != "" {
-			query["Marker"] = qParams.Marker
-		}
-		if qParams.MaxItems != 0 {
-			query["MaxItems"] = fmt.Sprintf("%d", qParams.MaxItems)
-		}
-		if qParams.PathPrefix != "" {
-			query["PathPrefix"] = qParams.PathPrefix
-		}
-	}
-	jsonObj, err := conn.Send(
-		"POST",
-		apiPathIAM,
-		query,                                  // query
-		nil,                                    // body
-		map[string]string{apiHdrNamespace: ns}, // extra headers
-	)
-	if err != nil {
-		return nil, err
-	}
-	var result struct {
-		ListAttachedUserPoliciesResult ObjectScaleListIAMAttachedUserPolicies
-	}
-	if err = mapstructure.Decode(jsonObj, &result); err != nil {
-		return nil, err
-	}
-	return &result.ListAttachedUserPoliciesResult, nil
-}
-
 // AttachIAMGroupPolicy adds a policy to a group
 func (conn *ObjectScaleConn) AttachIAMGroupPolicy(ns string, groupName string, policy string) (*ObjectScaleGeneralResponse, error) {
 	return conn.DoBasicIAMCall(
@@ -265,4 +156,113 @@ func (conn *ObjectScaleConn) DetachIAMUserPolicy(ns string, userName string, pol
 			apiOpPolicyArn: GetURNPolicyFromString(policy),
 		},
 	)
+}
+
+// ListIAMPolicies returns a list of policies
+func (conn *ObjectScaleConn) ListIAMPolicies(ns string, qParams *ObjectScaleQueryParams) (*ObjectScaleListIAMPolicy, error) {
+	query := map[string]string{
+		apiOpAction: "ListPolicies",
+	}
+	if qParams != nil {
+		if qParams.Marker != "" {
+			query["Marker"] = qParams.Marker
+		}
+		if qParams.MaxItems != 0 {
+			query["MaxItems"] = fmt.Sprintf("%d", qParams.MaxItems)
+		}
+		if qParams.PathPrefix != "" {
+			query["PathPrefix"] = qParams.PathPrefix
+		}
+		query["OnlyAttached"] = fmt.Sprintf("%t", qParams.OnlyAttached)
+		if qParams.PolicyUsageFilter != "" {
+			query["PolicyUsageFilter"] = qParams.PolicyUsageFilter
+		}
+		if qParams.PolicyScope != "" {
+			query["PolicyScope"] = qParams.PolicyScope
+		}
+	}
+	jsonObj, err := conn.Send(
+		"POST",
+		apiPathIAM,
+		query,                                  // query
+		nil,                                    // body
+		map[string]string{apiHdrNamespace: ns}, // extra headers
+	)
+	if err != nil {
+		return nil, err
+	}
+	var result struct{ ListPoliciesResult ObjectScaleListIAMPolicy }
+	if err = mapstructure.Decode(jsonObj, &result); err != nil {
+		return nil, err
+	}
+	return &result.ListPoliciesResult, nil
+}
+
+// ListIAMUserPolicies returns a list of user policies
+func (conn *ObjectScaleConn) ListIAMUserPolicies(ns string, userName string, qParams *ObjectScaleQueryParams) (*ObjectScaleListIAMUserPolicies, error) {
+	query := map[string]string{
+		apiOpAction:   "ListUserPolicies",
+		apiOpUserName: userName,
+	}
+	if qParams != nil {
+		if qParams.Marker != "" {
+			query["Marker"] = qParams.Marker
+		}
+		if qParams.MaxItems != 0 {
+			query["MaxItems"] = fmt.Sprintf("%d", qParams.MaxItems)
+		}
+	}
+	jsonObj, err := conn.Send(
+		"POST",
+		apiPathIAM,
+		query,                                  // query
+		nil,                                    // body
+		map[string]string{apiHdrNamespace: ns}, // extra headers
+	)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		ListUserPoliciesResult ObjectScaleListIAMUserPolicies
+	}
+	if err = mapstructure.Decode(jsonObj, &result); err != nil {
+		return nil, err
+	}
+	return &result.ListUserPoliciesResult, nil
+}
+
+// ListIAMAttachedUserPolicies returns a list of policies that are attached to a user
+func (conn *ObjectScaleConn) ListIAMAttachedUserPolicies(ns string, userName string, qParams *ObjectScaleQueryParams) (*ObjectScaleListIAMAttachedUserPolicies, error) {
+	query := map[string]string{
+		apiOpAction:   "ListAttachedUserPolicies",
+		apiOpUserName: userName,
+	}
+	if qParams != nil {
+		if qParams.Marker != "" {
+			query["Marker"] = qParams.Marker
+		}
+		if qParams.MaxItems != 0 {
+			query["MaxItems"] = fmt.Sprintf("%d", qParams.MaxItems)
+		}
+		if qParams.PathPrefix != "" {
+			query["PathPrefix"] = qParams.PathPrefix
+		}
+	}
+	jsonObj, err := conn.Send(
+		"POST",
+		apiPathIAM,
+		query,                                  // query
+		nil,                                    // body
+		map[string]string{apiHdrNamespace: ns}, // extra headers
+	)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		ListAttachedUserPoliciesResult ObjectScaleListIAMAttachedUserPolicies
+	}
+	if err = mapstructure.Decode(jsonObj, &result); err != nil {
+		return nil, err
+	}
+	return &result.ListAttachedUserPoliciesResult, nil
 }

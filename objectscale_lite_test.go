@@ -3,25 +3,25 @@ package objectscalelite
 import (
 	"fmt"
 	"log"
-  "os"
-  "strconv"
+	"os"
+	"strconv"
 	"testing"
 )
 
 func envOrDefault(name string, defValue string) string {
-  value, exist := os.LookupEnv(name)
-  if exist == false {
-    return defValue
-  }
-  return value
+	value, exist := os.LookupEnv(name)
+	if exist == false {
+		return defValue
+	}
+	return value
 }
 
 func envOrFail(t *testing.T, name string) string {
-  value, exist := os.LookupEnv(name)
-  if exist == false {
-    t.Fatal("To run tests you must provide environment variables USER, PASSWORD, ENDPOINT, and NAMESPACE")
-  }
-  return value
+	value, exist := os.LookupEnv(name)
+	if exist == false {
+		t.Fatal("To run tests you must provide environment variables USER, PASSWORD, ENDPOINT, and NAMESPACE")
+	}
+	return value
 }
 
 var (
