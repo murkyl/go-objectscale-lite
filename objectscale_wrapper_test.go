@@ -2,7 +2,7 @@ package objectscalelite
 
 import (
 	"fmt"
-  "strconv"
+	"strconv"
 	"testing"
 )
 
@@ -151,6 +151,22 @@ func TestWrapperAddIAMUserToGroup(t *testing.T) {
 	testDisconnect(t, conn)
 }
 
+func TestWrapperGetAccessKey(t *testing.T) {
+	var conn *ObjectScaleConn
+	if conn = testConnect(t); conn == nil {
+		t.Fail()
+		return
+	}
+	response, err := conn.CreateIAMAccessKey(TestNamespace, TestIAMUser)
+	if err != nil {
+		t.Logf("Error creating access key: %v", err)
+		t.Fail()
+		return
+	}
+	t.Logf("Access key: %v\n", response)
+	testDisconnect(t, conn)
+}
+
 func TestWrapperDeleteIAMUser(t *testing.T) {
 	var conn *ObjectScaleConn
 	if conn = testConnect(t); conn == nil {
@@ -164,5 +180,22 @@ func TestWrapperDeleteIAMUser(t *testing.T) {
 		return
 	}
 	t.Logf("Delete User Result: %v\n", delResponse)
+	testDisconnect(t, conn)
+}
+
+func TestWrapperDeleteIAMGroup(t *testing.T) {
+	var conn *ObjectScaleConn
+	if conn = testConnect(t); conn == nil {
+		t.Fail()
+		return
+	}
+	for i := 0; i < TestIAMGroupCount; i++ {
+		_, err := conn.DeleteIAMGroup(TestNamespace, fmt.Sprintf("%s%d", TestIAMGroupBase, i))
+		if err != nil {
+			t.Logf("Error deleting IAM group: %v", err)
+			t.Fail()
+			return
+		}
+	}
 	testDisconnect(t, conn)
 }
