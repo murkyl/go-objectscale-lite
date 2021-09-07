@@ -301,7 +301,7 @@ func (conn *ObjectScaleConn) DeleteIAMAccessKeyAll(ns string, userName string) e
     return err
   }
   for _, keyMeta := range keyList.AccessKeyMetadata {
-    result, err := conn.DeleteIAMAccessKey(ns, userName, keyMeta.AccessKeyID)
+    _, err := conn.DeleteIAMAccessKey(ns, userName, keyMeta.AccessKeyID)
     if err != nil {
       errList = append(errList, fmt.Sprintf("Unable to delete access key %s for user %s in namespace %s: %v", keyMeta.AccessKeyID, userName, ns, err))
     }
