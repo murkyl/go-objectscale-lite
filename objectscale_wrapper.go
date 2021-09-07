@@ -293,6 +293,25 @@ func (conn *ObjectScaleConn) DeleteIAMAccessKey(ns string, userName string, acce
 	)
 }
 
+// DeleteIAMAccessKey deletes an access key from a user
+func (conn *ObjectScaleConn) DeleteIAMAccessKeyAll(ns string, userName string) error {
+  var errList []string
+  keyList, err := conn.ListIAMAccessKeys(ns, userName, nil)
+  if err != nil {
+    return err
+  }
+  for _, keyMeta := range keyList.AccessKeyMetadata {
+    result, err := conn.DeleteIAMAccessKey(ns, userName, keyMeta.AccessKeyID)
+    if err != nil {
+      errList = append(errList, fmt.Sprintf("Unable to delete access key %s for user %s in namespace %s: %v", keyMeta.AccessKeyID, userName, ns, err))
+    }
+  }
+  if len(errList) > 0 {
+    return fmt.Errorf(strings.Join(errList, "\n"))
+  }
+  return nil
+}
+
 // DeleteIAMGroup deletes a group in the specified namespace ns
 func (conn *ObjectScaleConn) DeleteIAMGroup(ns string, groupName string) (*ObjectScaleGeneralResponse, error) {
 	return conn.DoBasicIAMCall(
@@ -328,7 +347,7 @@ func (conn *ObjectScaleConn) DeleteIAMUser(ns string, userName string) (*ObjectS
 }
 
 // DeleteIAMUserForce will delete a user in a given namespace without first performing normal cleanup
-// The fuction does the cleanup on the caller's behalf by removing the user from any groups and detaching
+// The function does the cleanup on the caller's behalf by removing the user from any groups and detaching
 // any policies before removing the user account
 func (conn *ObjectScaleConn) DeleteIAMUserForce(ns string, userName string) (*ObjectScaleGeneralResponse, error) {
 	// Remove the user from any groups they belong
