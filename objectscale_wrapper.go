@@ -8,18 +8,29 @@ import (
 )
 
 const (
-	apiHdrNamespace         string = "x-emc-namespace"
-	apiOpAccessKeyID        string = "AccessKeyId"
-	apiOpAction             string = "Action"
-	apiOpUserName           string = "UserName"
-	apiOpGroupName          string = "GroupName"
-	apiOpPermissionBoundary string = "PermissionsBoundary"
-	apiOpPolicyArn          string = "PolicyArn"
-	apiOpRoleName           string = "RoleName"
-	apiPathIAM              string = "iam"
+	apiDefaultDuration       int64  = 3600
+	apiHdrNamespace          string = "x-emc-namespace"
+	apiOpAccessKeyID         string = "AccessKeyId"
+	apiOpAction              string = "Action"
+	apiOpDurationSeconds     string = "DurationSeconds"
+	apiOpInlineSessionPolicy string = "InlineSessionPolicy"
+	apiOpUserName            string = "UserName"
+	apiOpGroupName           string = "GroupName"
+	apiOpMarker              string = "Marker"
+	apiOpMaxItems            string = "MaxItems"
+	apiOpPath                string = "Path"
+	apiOpPathPrefix          string = "PathPrefix"
+	apiOpPermissionBoundary  string = "PermissionsBoundary"
+	apiOpPolicyArn           string = "PolicyArn"
+	apiOpPolicyArns          string = "PolicyArns"
+	apiOpRoleArn             string = "RoleArn"
+	apiOpRoleName            string = "RoleName"
+	apiOpRoleSessionName     string = "RoleSessionName"
+	apiPathIAM               string = "iam"
+	apiPathSTS               string = "sts"
 )
 
-// ObjectScaleCfg contains the configuration to connect to a OneFS cluster endpoint
+// ObjectScaleCfg contains the configuration to connect to an ObjectScale cluster endpoint
 type ObjectScaleCfg struct {
 	User       string
 	Password   string
@@ -37,14 +48,20 @@ type ObjectScaleConn struct {
 // be ignored
 type ObjectScaleQueryParams struct {
 	Boundary            string
+	DurationSeconds     int64
+	InlineSessionPolicy string
 	Marker              string
 	MaxItems            int
 	OnlyAttached        bool
 	Path                string
 	PathPrefix          string
 	PermissionsBoundary string
+	PolicyArns          string
 	PolicyScope         string
 	PolicyUsageFilter   string
+	PrincipalArn        string
+	RoleArn             string
+	SAMLAssertion       string
 	Tags                map[string]string
 	UserName            string
 }
@@ -54,6 +71,30 @@ type ObjectScaleGeneralResponse struct {
 	ResponseMetadata struct {
 		RequestID string
 	}
+}
+
+type ObjectScaleAssumedRole struct {
+	AssumeRoleUser ObjectScaleAssumedRoleUser
+	Credentials    ObjectScaleCredentials
+}
+
+type ObjectScaleAssumedRoleUser struct {
+	AssumedRoleID string
+	Arn           string
+}
+
+type ObjectScaleAssumedSAMLRole struct {
+	ObjectScaleAssumedRole
+	Issuer      string
+	Subject     string
+	SubjectType string
+}
+
+type ObjectScaleCredentials struct {
+	AccessKeyID     string
+	Expiration      string
+	SecretAccessKey string
+	SessionToken    string
 }
 
 // ObjectScaleIAMAccessKey holds the access key and secret for a user
@@ -133,7 +174,7 @@ func NewObjectScaleConn() *ObjectScaleConn {
 	return &state
 }
 
-// Connect performs the actual connection to the OneFS cluster endpoint given the endpoint configuration in a ObjectScaleCfg struct
+// Connect performs the actual connection to the ObjectScale cluster endpoint given the endpoint configuration in a ObjectScaleCfg struct
 func (conn *ObjectScaleConn) Connect(cfg *ObjectScaleCfg) error {
 	conn.Disconnect()
 	conn.SetEndpoint(cfg.Endpoint)
@@ -218,7 +259,7 @@ func (conn *ObjectScaleConn) CreateIAMUser(ns string, userName string, qParams *
 	}
 	if qParams != nil {
 		if qParams.Path != "" {
-			query["Path"] = qParams.Path
+			query[apiOpPath] = qParams.Path
 		}
 		if qParams.PermissionsBoundary != "" {
 			query[apiOpPermissionBoundary] = GetURNPolicyFromString(qParams.PermissionsBoundary)
@@ -259,7 +300,7 @@ func (conn *ObjectScaleConn) CreateIAMGroup(ns string, groupName string, qParams
 	}
 	if qParams != nil {
 		if qParams.Path != "" {
-			query["Path"] = qParams.Path
+			query[apiOpPath] = qParams.Path
 		}
 	}
 	jsonObj, err := conn.Send(
@@ -406,13 +447,13 @@ func (conn *ObjectScaleConn) ListIAMAccessKeys(ns string, userName string, qPara
 	}
 	if qParams != nil {
 		if qParams.Marker != "" {
-			query["Marker"] = qParams.Marker
+			query[apiOpMarker] = qParams.Marker
 		}
 		if qParams.MaxItems != 0 {
-			query["MaxItems"] = fmt.Sprintf("%d", qParams.MaxItems)
+			query[apiOpMaxItems] = fmt.Sprintf("%d", qParams.MaxItems)
 		}
 		if qParams.PathPrefix != "" {
-			query["PathPrefix"] = qParams.PathPrefix
+			query[apiOpPathPrefix] = qParams.PathPrefix
 		}
 	}
 	jsonObj, err := conn.Send(
@@ -440,10 +481,10 @@ func (conn *ObjectScaleConn) ListIAMGroupsForUser(ns string, userName string, qP
 	}
 	if qParams != nil {
 		if qParams.Marker != "" {
-			query["Marker"] = qParams.Marker
+			query[apiOpMarker] = qParams.Marker
 		}
 		if qParams.MaxItems != 0 {
-			query["MaxItems"] = fmt.Sprintf("%d", qParams.MaxItems)
+			query[apiOpMaxItems] = fmt.Sprintf("%d", qParams.MaxItems)
 		}
 	}
 	jsonObj, err := conn.Send(
@@ -470,13 +511,13 @@ func (conn *ObjectScaleConn) ListIAMUsers(ns string, qParams *ObjectScaleQueryPa
 	}
 	if qParams != nil {
 		if qParams.Marker != "" {
-			query["Marker"] = qParams.Marker
+			query[apiOpMarker] = qParams.Marker
 		}
 		if qParams.MaxItems != 0 {
-			query["MaxItems"] = fmt.Sprintf("%d", qParams.MaxItems)
+			query[apiOpMaxItems] = fmt.Sprintf("%d", qParams.MaxItems)
 		}
 		if qParams.PathPrefix != "" {
-			query["PathPrefix"] = qParams.PathPrefix
+			query[apiOpPathPrefix] = qParams.PathPrefix
 		}
 	}
 	jsonObj, err := conn.Send(
