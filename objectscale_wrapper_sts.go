@@ -12,12 +12,11 @@ import (
 func (conn *ObjectScaleConn) AssumeRole(roleArn string, qParams *ObjectScaleQueryParams, signingCtx *V4SignerContext) (*ObjectScaleAssumedRole, error) {
 	query := map[string]string{
 		apiOpAction:          "AssumeRole",
-		apiOpDurationSeconds: fmt.Sprintf("%d", apiDefaultDuration),
 		apiOpRoleArn:         GetURNPolicyFromString(roleArn),
 		apiOpRoleSessionName: fmt.Sprintf("%s-%d", signingCtx.AccessKey, time.Now().Unix()), // Session name max 64 chars [\w+=,.@-]*
 	}
 	if qParams != nil {
-		if qParams.DurationSeconds != 0 && qParams.DurationSeconds > apiDefaultDuration {
+		if qParams.DurationSeconds != 0 {
 			query[apiOpDurationSeconds] = fmt.Sprintf("%d", qParams.DurationSeconds)
 		}
 		if qParams.InlineSessionPolicy != "" {

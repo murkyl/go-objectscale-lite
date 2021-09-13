@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	apiDefaultDuration       int64  = 3600
 	apiHdrNamespace          string = "x-emc-namespace"
 	apiOpAccessKeyID         string = "AccessKeyId"
 	apiOpAction              string = "Action"
