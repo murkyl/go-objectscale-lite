@@ -183,7 +183,7 @@ func (conn *ObjectScaleConn) Connect(cfg *ObjectScaleCfg) error {
 		log.Print(fmt.Sprintf("[Connect] Unable to connect to API endpoint: %s\n", err))
 		return err
 	}
-	log.Print(fmt.Sprintf("[Connect] Connected with session ID: %s", conn.SessionToken))
+	//log.Print(fmt.Sprintf("[Connect] Connected with session ID: %s", conn.SessionToken))
 	return nil
 }
 
