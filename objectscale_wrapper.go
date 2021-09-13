@@ -145,13 +145,13 @@ type ObjectScaleListIAMUserGroup struct {
 	Groups []ObjectScaleIAMGroup
 }
 
-// GetURNPolicyFromString takes strings in 2 formats and returns a URN policy string
+// GetURNFromString takes strings in 3 formats and returns a URN string
 // The URN format looks like: urn:ecs:service::namespace:resource-type/resource-id
-// An example URL for ObjectScale: urn:ecs:iam:::policy/NameOfAPolicy
-// The first format is a string that is already in the urn format and that string is returned
-// The second supports a simple string that for policies in the Global/System context
-// Policies in a specific namespace can be used with the format namespace:policyName
-func GetURNPolicyFromString(data string) string {
+// An example policy URL for ObjectScale: urn:ecs:iam:::policy/NameOfAPolicy
+// The first format is a string that is already in the urn format and that string is returned unchanged
+// The second supports a simple string in the Global/System context
+// The third supports a specific namespace and can be used with the format namespace:policyName
+func GetURNFromString(data string, resource string) string {
 	if strings.HasPrefix(data, "urn:") {
 		return data
 	}
@@ -161,7 +161,17 @@ func GetURNPolicyFromString(data string) string {
 		ns = urnParts[0]
 		data = urnParts[1]
 	}
-	return fmt.Sprintf("urn:ecs:iam::%s:policy/%s", ns, data)
+	return fmt.Sprintf("urn:ecs:iam::%s:%s/%s", ns, resource, data)
+}
+
+// GetURNPolicyFromString calls GetURNFromString with the resource type "policy"
+func GetURNPolicyFromString(data string) string {
+	return GetURNFromString(data, "policy")
+}
+
+// GetURNRoleFromString calls GetURNFromString with the resource type "role"
+func GetURNRoleFromString(data string) string {
+	return GetURNFromString(data, "role")
 }
 
 // NewObjectScaleConn returns a connection state object that is used by all other calls in this library
