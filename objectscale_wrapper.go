@@ -61,6 +61,7 @@ type ObjectScaleQueryParams struct {
 	PolicyUsageFilter   string
 	PrincipalArn        string
 	RoleArn             string
+	RoleSessionName     string
 	SAMLAssertion       string
 	Tags                map[string]string
 	UserName            string
@@ -73,28 +74,24 @@ type ObjectScaleGeneralResponse struct {
 	}
 }
 
+// ObjectScaleAssumedRole holds the return values of an IAM Assume Role response
 type ObjectScaleAssumedRole struct {
 	AssumeRoleUser ObjectScaleAssumedRoleUser
 	Credentials    ObjectScaleCredentials
 }
 
+// ObjectScaleAssumedRoleUser holds the return value for an assumed role in an IAM Assume Role response
 type ObjectScaleAssumedRoleUser struct {
 	AssumedRoleID string
 	Arn           string
 }
 
+// ObjectScaleAssumedSAMLRole holds the return value for a SAML response in an IAM Assume Role SAML response
 type ObjectScaleAssumedSAMLRole struct {
 	ObjectScaleAssumedRole
 	Issuer      string
 	Subject     string
 	SubjectType string
-}
-
-type ObjectScaleCredentials struct {
-	AccessKeyID     string
-	Expiration      string
-	SecretAccessKey string
-	SessionToken    string
 }
 
 // ObjectScaleIAMAccessKey holds the access key and secret for a user

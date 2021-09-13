@@ -6,22 +6,27 @@ package objectscalelite
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
 
 const (
 	defaultConnTimeout    int    = 120
-	defaultMaxReauthCount int    = 1
-	headerSessionToken    string = "X-SDS-AUTH-TOKEN"
+	defaultMaxReauthCount int    = 5
+	headerSessionToken    string = "X-Sds-Auth-Token"
+	headerAccept          string = "Accept"
+	acceptApplicationJSON string = "application/json"
 	sessionLoginPath      string = "login"
 	sessionLogoutPath     string = "logout"
 )
@@ -36,6 +41,14 @@ type ObjectScaleSession struct {
 	Client       *http.Client
 	ConnTimeout  int
 	reauthCount  int
+}
+
+// ObjectScaleCredentials holds the access ID, secret key, session token, and expiration
+type ObjectScaleCredentials struct {
+	AccessKeyID     string
+	Expiration      string
+	SecretAccessKey string
+	SessionToken    string
 }
 
 // NewSession is a factory function returning a context object. This must be used in order to
@@ -100,12 +113,21 @@ func (ctx *ObjectScaleSession) GetURL(path interface{}, query map[string]string)
 	default:
 		x.Path += path.(string)
 	}
-	q := url.Values{}
-	for k, v := range query {
-		q.Add(k, v)
+	// Manually create the query params as the standard Go query.Encode() wants to encode all reserved characters even if it is not necessary
+	queryString := ""
+	if query != nil {
+		qArray := make([]string, 0, len(query))
+		sortedKeys := make([]string, 0, len(query))
+		for key := range query {
+			sortedKeys = append(sortedKeys, key)
+		}
+		sort.Strings(sortedKeys)
+		for _, key := range sortedKeys {
+			qArray = append(qArray, queryEscape(key)+"="+queryEscape(query[key]))
+		}
+		queryString = "?" + strings.Join(qArray, "&")
 	}
-	x.RawQuery = q.Encode()
-	return x.String()
+	return x.String() + queryString
 }
 
 // init is an internal helper function to create the http.Client object
@@ -141,7 +163,7 @@ func (ctx *ObjectScaleSession) Connect() error {
 	if err != nil {
 		return fmt.Errorf("[Connect] Failed to create NewRequest: %v", err)
 	}
-	req.Header.Add("Accept", "application/json")
+	req.Header.Add(headerAccept, acceptApplicationJSON)
 	req.SetBasicAuth(ctx.User, ctx.Password)
 	resp, err := ctx.Client.Do(req)
 	if err != nil {
@@ -153,10 +175,10 @@ func (ctx *ObjectScaleSession) Connect() error {
 		return fmt.Errorf("[Connect] Unable to create a session: %s", fmt.Sprintf("%+v", string(respBody)))
 	}
 	// The camel cased header is required due to HTTP library processing the headers
-	if resp.Header["X-Sds-Auth-Token"] == nil {
+	if resp.Header[headerSessionToken] == nil {
 		return fmt.Errorf("[Connect] No session token in response:\n%v", resp)
 	}
-	ctx.SessionToken = resp.Header["X-Sds-Auth-Token"][0]
+	ctx.SessionToken = resp.Header[headerSessionToken][0]
 	if ctx.SessionToken == "" {
 		return fmt.Errorf("[Connect] Unable to get session token:\n%v", resp)
 	}
@@ -204,6 +226,12 @@ func (ctx *ObjectScaleSession) Reconnect() error {
 // SendRaw makes a call to the API and returns the raw HTTP response and error codes. It is the responsibility
 // of the caller to process the response.
 func (ctx *ObjectScaleSession) SendRaw(method string, path interface{}, query map[string]string, body interface{}, headers map[string]string) (*http.Response, error) {
+	return ctx.SendRawSigned(method, path, query, body, headers, nil)
+}
+
+// SendRawSigned makes a call to the API and returns the raw HTTP response and error codes. The function will also sign
+// the request using the AWS v4 signature algorithm. It is the responsibility of the caller to process the response.
+func (ctx *ObjectScaleSession) SendRawSigned(method string, path interface{}, query map[string]string, body interface{}, headers map[string]string, signingCtx *V4SignerContext) (*http.Response, error) {
 	var reqBody io.Reader
 	switch body.(type) {
 	case nil:
@@ -217,9 +245,14 @@ func (ctx *ObjectScaleSession) SendRaw(method string, path interface{}, query ma
 	}
 	req, err := http.NewRequest(method, ctx.GetURL(path, query), reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("[SendRaw] Request error: %v", err)
+		return nil, fmt.Errorf("[SendRawSgined] Request error: %v", err)
 	}
-	setHeaders(req, ctx, headers)
+	if signingCtx != nil {
+		setHeadersMinimal(req, ctx, headers)
+		signingCtx.V4SignRequest(req)
+	} else {
+		setHeaders(req, ctx, headers)
+	}
 	return ctx.Client.Do(req)
 }
 
@@ -227,41 +260,48 @@ func (ctx *ObjectScaleSession) SendRaw(method string, path interface{}, query ma
 // response into a JSON object in the form of a map[string]interface{}. This call will also attempt to automatically
 // re-authenticate if a 401 response is returned.
 func (ctx *ObjectScaleSession) Send(method string, path interface{}, query map[string]string, body interface{}, headers map[string]string) (map[string]interface{}, error) {
+	return ctx.SendSigned(method, path, query, body, headers, nil)
+}
+
+// SendSigned performs an API call and does some automatic post-processing. The function will also sign the request
+// using the AWS v4 signature algorithm. This processing consists of converting the response into a JSON object in the
+// form of a map[string]interface{}. This call will also attempt to automatically re-authenticate if a 401 response is
+// returned.
+func (ctx *ObjectScaleSession) SendSigned(method string, path interface{}, query map[string]string, body interface{}, headers map[string]string, signingCtx *V4SignerContext) (map[string]interface{}, error) {
 	jsonBody := make(map[string]interface{})
 
-	resp, err := ctx.SendRaw(method, path, query, body, headers)
+	resp, err := ctx.SendRawSigned(method, path, query, body, headers, signingCtx)
 	if err != nil {
-		return nil, fmt.Errorf("[Send] Error returned by SendRaw: %v", err)
+		return nil, fmt.Errorf("[SendSigned] Error returned by SendRawSigned: %v", err)
 	}
 	defer resp.Body.Close()
 	rawBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("[Send] Error reading response body: %v", err)
+		return nil, fmt.Errorf("[SendSigned] Error reading response body: %v", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		if resp.StatusCode == 401 {
 			// If a 401 error with a message of "Authorization required" is received, we should automatically re-authenticate to get a new session token and retry the request
 			if ctx.reauthCount >= defaultMaxReauthCount {
-				log.Printf("[ERROR][Send] Automatic re-authentication failed!")
+				log.Printf("[ERROR][SendSigned] Automatic re-authentication failed!")
 			} else {
+				time.Sleep(backoffTime(ctx.reauthCount, 0, nil))
 				ctx.reauthCount++
 				ctx.Reconnect()
-				// Recursively call Send with the same parameters and return the result. There is a limited number of re-auth attempts before failing the entire call
-				return ctx.Send(method, path, query, body, headers)
+				// Recursively call SendSigned with the same parameters and return the result. There is a limited number of re-auth attempts before failing the entire call
+				return ctx.SendSigned(method, path, query, body, headers, signingCtx)
 			}
 		}
-		return nil, fmt.Errorf("[Send] Non 2xx response received (%d): %s", resp.StatusCode, fmt.Sprintf("%+v", string(rawBody)))
+		return nil, fmt.Errorf("[SendSigned] Non 2xx response received (%d): %s", resp.StatusCode, fmt.Sprintf("%+v", string(rawBody)))
 	}
-
 	// If there is no body in the response, there is no need to try and process continuation requests
 	// This can happen for some methods like DELETE
 	if len(rawBody) == 0 || rawBody == nil {
 		return nil, nil
 	}
 
-	err = json.Unmarshal(rawBody, &jsonBody)
-	if err != nil {
-		return nil, fmt.Errorf("[Send] Error unmarshaling JSON: %v\nRaw body: %s", err, rawBody)
+	if err := json.Unmarshal(rawBody, &jsonBody); err != nil {
+		return nil, fmt.Errorf("[SendSigned] Error unmarshaling JSON: %v\nRaw body: %s", err, rawBody)
 	}
 	return jsonBody, nil
 }
@@ -270,14 +310,14 @@ func (ctx *ObjectScaleSession) Send(method string, path interface{}, query map[s
 // The function takes the request, ObjectScaleSession, and a map containing possible header key/value pairs
 // The function first overwrites any existing headers in the request with those supplied in the headers parameter
 // Only after this is done do we attempt to add in the session header. If these headers exist in the passed in
-// headers array, they are not overriden. The values in the passed in headers map take precedence
+// headers array, they are not overridden. The values in the passed in headers map take precedence
 func setHeaders(req *http.Request, ctx *ObjectScaleSession, headers map[string]string) {
 	for k, v := range headers {
 		// Manually set headers as we want to preserve the case sensitivity of each header
 		req.Header[k] = []string{v}
 	}
 	defaultHeaders := map[string]string{
-		"Accept":           "application/json",
+		headerAccept:       acceptApplicationJSON,
 		headerSessionToken: ctx.SessionToken,
 	}
 	for k, v := range defaultHeaders {
@@ -285,4 +325,53 @@ func setHeaders(req *http.Request, ctx *ObjectScaleSession, headers map[string]s
 			req.Header.Add(k, v)
 		}
 	}
+}
+
+// setHeadersMinimal sets the headers for a request appropriately
+// The function takes the request, ObjectScaleSession, and a map containing possible header key/value pairs
+// The function first overwrites any existing headers in the request with those supplied in the headers parameter
+// Only after this is done do we attempt to add in the session header. If these headers exist in the passed in
+// headers array, they are not overridden. The values in the passed in headers map take precedence
+func setHeadersMinimal(req *http.Request, ctx *ObjectScaleSession, headers map[string]string) {
+	for k, v := range headers {
+		// Manually set headers as we want to preserve the case sensitivity of each header
+		req.Header[k] = []string{v}
+	}
+	defaultHeaders := map[string]string{
+		headerAccept: acceptApplicationJSON,
+	}
+	for k, v := range defaultHeaders {
+		if _, ok := req.Header[k]; !ok {
+			req.Header.Add(k, v)
+		}
+	}
+}
+
+// backoffTime calculates the number of milliseconds to sleep given the number of retires already attempted
+// backoffType determines the backoff algorithm. The available backoff types:
+// 0: Exponential backoff, (2^retry)ms + (random[0-100))ms, max = 5 seconds
+func backoffTime(retry int, backoffType int, backoffCfg *map[string]interface{}) time.Duration {
+	backoff := 0
+	maxBackoff := 5 * 1000
+	switch backoffType {
+	default:
+		num, _ := rand.Int(rand.Reader, big.NewInt(100))
+		backoff = 2 ^ retry + int(num.Int64())
+	}
+	if backoff > maxBackoff {
+		backoff = maxBackoff
+	}
+	return time.Duration(backoff) * time.Millisecond
+}
+
+func queryEscape(q string) string {
+	// There are a small subset of characters that must be escaped in the query portion of a URL
+	// Those are "&" / "#" / "=" / "%"
+	// These characters are delimiters for the key=value pairs, a delimiter for the fragment portion of the URL, a delimiter
+	// for the key and value portions, and the escape character
+	noPercent := strings.Replace(q, "%", "%25", -1)
+	noEquals := strings.Replace(noPercent, "=", "%3D", -1)
+	noHashes := strings.Replace(noEquals, "#", "%23", -1)
+	noAmpersand := strings.Replace(noHashes, "&", "%26", -1)
+	return noAmpersand
 }
