@@ -1,9 +1,11 @@
 package objectscalelite
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -11,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"log"
 )
 
 const (
@@ -71,11 +74,17 @@ func (ctx *V4SignerContext) V4SignRequest(req *http.Request) string {
 	// Check if a SHA256 of the body is required
 	if req.Body != nil {
 		if _, ok := req.Header[v4SignerHdrAmzContentSha256]; !ok {
-			// TODO: Need to do body SHA256
-			//req.Header.Add(v4SignerHdrAmzContentSha256, "HashValueHere")
-		} else {
-			payloadHash = req.Header.Get(v4SignerHdrAmzContentSha256)
+			var err error
+			var b *bytes.Buffer
+			b, req.Body, err = getBodyBytes(req.Body)
+			if err != nil {
+				log.Printf("[V4SignRequest] Error reading body: %v", err)
+				return ""
+			}
+			h := GetSha256Hex(b.Bytes())
+			req.Header.Add(v4SignerHdrAmzContentSha256, h)
 		}
+		payloadHash = req.Header.Get(v4SignerHdrAmzContentSha256)
 	}
 	// Generate the main components needed to be signed
 	canonicalURI := CreateV4CanonicalURIString(req)
@@ -212,8 +221,8 @@ func CreateV4CanonicalURIString(req *http.Request) string {
 // if a header in an HTTP request should be included in the signed request
 func GetV4DefaultSignedHeaders() []*regexp.Regexp {
 	return []*regexp.Regexp{
-		regexp.MustCompile("(?i)^(x-amz-|content-|if-).*$"),
-		regexp.MustCompile("(?i)^(accept|cache-control|expires|host|range)$"),
+		regexp.MustCompile("(?i)^(x-amz-|if-).*$"),
+		regexp.MustCompile("(?i)^(cache-control|expires|host|range)$"),
 	}
 }
 
@@ -275,4 +284,25 @@ func isSignedHeader(header string, headerRegex []*regexp.Regexp) bool {
 func v4Trimspace(s string) string {
 	trimmed := strings.TrimSpace(s)
 	return v4SignerTrimspace.ReplaceAllString(trimmed, " ")
+}
+
+// getBodyBytes reads all of b to memory and then returns a bytes buffer and a
+// ReadCloser yielding the same bytes.
+//
+// It returns an error if the initial slurp of all bytes fails. It does not attempt
+// to make the returned ReadClosers have identical error-matching behavior.
+// This method was modified from: https://cs.opensource.google/go/go/+/refs/tags/go1.17.1:src/net/http/httputil/dump.go;drc=refs%2Ftags%2Fgo1.17.1;l=25
+func getBodyBytes(b io.ReadCloser) (r1 *bytes.Buffer, r2 io.ReadCloser, err error) {
+	if b == nil || b == http.NoBody {
+		// No copying needed. Preserve the magic sentinel meaning of NoBody.
+		return nil, http.NoBody, nil
+	}
+	var buf bytes.Buffer
+	if _, err = buf.ReadFrom(b); err != nil {
+		return nil, b, err
+	}
+	if err = b.Close(); err != nil {
+		return nil, b, err
+	}
+	return &buf, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 }
