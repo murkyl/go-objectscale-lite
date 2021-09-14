@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -13,7 +14,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"log"
 )
 
 const (
