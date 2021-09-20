@@ -62,7 +62,7 @@ func NewSession(endpoint string) *ObjectScaleSession {
 		Endpoint:    endpoint,
 		ConnTimeout: defaultConnTimeout,
 		IgnoreCert:  false,
-		AuthType: defaultAuthType,
+		AuthType:    defaultAuthType,
 	}
 }
 
@@ -339,7 +339,7 @@ func setHeaders(req *http.Request, ctx *ObjectScaleSession, headers map[string]s
 		req.Header[k] = []string{v}
 	}
 	defaultHeaders := map[string]string{
-		headerAccept:       acceptApplicationJSON,
+		headerAccept: acceptApplicationJSON,
 	}
 	if ctx.AuthType == "basic" {
 		defaultHeaders[headerSessionToken] = ctx.SessionToken

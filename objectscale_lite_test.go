@@ -79,8 +79,8 @@ func TestIAMUserList(t *testing.T) {
 	jsonObj, err := conn.Send(
 		"POST",
 		apiPathIAM,
-		query,                                  // query
-		nil,                                    // body
+		query, // query
+		nil,   // body
 		map[string]string{apiHdrNamespace: TestNamespace}, // extra headers
 	)
 	if err != nil {
