@@ -34,7 +34,9 @@ type ObjectScaleCfg struct {
 	User       string
 	Password   string
 	Endpoint   string
+	AuthType   string
 	BypassCert bool
+	SigningCtx V4SignerContext
 }
 
 // ObjectScaleConn contains the state of a connection
@@ -183,10 +185,12 @@ func NewObjectScaleConn() *ObjectScaleConn {
 // Connect performs the actual connection to the ObjectScale cluster endpoint given the endpoint configuration in a ObjectScaleCfg struct
 func (conn *ObjectScaleConn) Connect(cfg *ObjectScaleCfg) error {
 	conn.Disconnect()
+	conn.SetAuthType(cfg.AuthType)
 	conn.SetEndpoint(cfg.Endpoint)
-	conn.SetUser(cfg.User)
-	conn.SetPassword(cfg.Password)
 	conn.SetIgnoreCert(cfg.BypassCert)
+	conn.SetPassword(cfg.Password)
+	conn.SetSigningCtx(cfg.SigningCtx)
+	conn.SetUser(cfg.User)
 	err := conn.ObjectScaleSession.Connect()
 	if err != nil {
 		log.Print(fmt.Sprintf("[Connect] Unable to connect to API endpoint: %s\n", err))

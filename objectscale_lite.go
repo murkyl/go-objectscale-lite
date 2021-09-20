@@ -22,6 +22,7 @@ import (
 )
 
 const (
+	defaultAuthType       string = "iam"
 	defaultConnTimeout    int    = 120
 	defaultMaxReauthCount int    = 5
 	headerSessionToken    string = "X-Sds-Auth-Token"
@@ -36,8 +37,10 @@ type ObjectScaleSession struct {
 	User         string
 	Password     string
 	Endpoint     string
+	AuthType     string
 	IgnoreCert   bool
 	SessionToken string
+	SigningCtx   *V4SignerContext
 	Client       *http.Client
 	ConnTimeout  int
 	reauthCount  int
@@ -59,20 +62,21 @@ func NewSession(endpoint string) *ObjectScaleSession {
 		Endpoint:    endpoint,
 		ConnTimeout: defaultConnTimeout,
 		IgnoreCert:  false,
+		AuthType: defaultAuthType,
 	}
 }
 
-// SetUser is a setter used to set the user name in the session context
-func (ctx *ObjectScaleSession) SetUser(s string) string {
-	old := ctx.User
-	ctx.User = s
+// SetAuthType is a setter used to set the type of authentication used in the connect call. Valid values are "iam" and "basic"
+func (ctx *ObjectScaleSession) SetAuthType(s string) string {
+	old := ctx.AuthType
+	ctx.AuthType = s
 	return old
 }
 
-// SetPassword is a setter used to set the password in the session context
-func (ctx *ObjectScaleSession) SetPassword(s string) string {
-	old := ctx.Password
-	ctx.Password = s
+// SetConnTimeout is a setter used to set the timeout for the HTTP connection (http.Client)
+func (ctx *ObjectScaleSession) SetConnTimeout(t int) int {
+	old := ctx.ConnTimeout
+	ctx.ConnTimeout = t
 	return old
 }
 
@@ -94,10 +98,24 @@ func (ctx *ObjectScaleSession) SetIgnoreCert(b bool) bool {
 	return old
 }
 
-// SetConnTimeout is a setter used to set the timeout for the HTTP connection (http.Client)
-func (ctx *ObjectScaleSession) SetConnTimeout(t int) int {
-	old := ctx.ConnTimeout
-	ctx.ConnTimeout = t
+// SetPassword is a setter used to set the password in the session context
+func (ctx *ObjectScaleSession) SetPassword(s string) string {
+	old := ctx.Password
+	ctx.Password = s
+	return old
+}
+
+// SetSigningCtx is a setter used to set the AWS v4 signing context in the session context
+func (ctx *ObjectScaleSession) SetSigningCtx(s V4SignerContext) *V4SignerContext {
+	old := ctx.SigningCtx
+	ctx.SigningCtx = &s
+	return old
+}
+
+// SetUser is a setter used to set the user name in the session context
+func (ctx *ObjectScaleSession) SetUser(s string) string {
+	old := ctx.User
+	ctx.User = s
 	return old
 }
 
@@ -159,6 +177,10 @@ func (ctx *ObjectScaleSession) Connect() error {
 	if ctx.Client == nil {
 		ctx.init()
 	}
+	if ctx.AuthType != "basic" {
+		// No connection or session token is required if the authentication type is IAM as each request is signed
+		return nil
+	}
 	req, err := http.NewRequest("GET", ctx.GetURL(sessionLoginPath, nil), nil)
 	if err != nil {
 		return fmt.Errorf("[Connect] Failed to create NewRequest: %v", err)
@@ -194,7 +216,7 @@ func (ctx *ObjectScaleSession) Disconnect() error {
 // DisconnectForce cleans up a connection to an endpoint. This call has a boolean that when set to true will
 // disconnect any other sessions belonging to the user that created the session
 func (ctx *ObjectScaleSession) DisconnectForce(force bool) error {
-	if ctx.Client == nil {
+	if ctx.Client == nil || ctx.AuthType != "basic" {
 		return nil
 	}
 	queryargs := map[string]string{}
@@ -230,7 +252,9 @@ func (ctx *ObjectScaleSession) SendRaw(method string, path interface{}, query ma
 }
 
 // SendRawSigned makes a call to the API and returns the raw HTTP response and error codes. The function will also sign
-// the request using the AWS v4 signature algorithm. It is the responsibility of the caller to process the response.
+// the request using the AWS v4 signature algorithm. It is the responsibility of the caller to process the response. The
+// call will used the V4SignerContext in the context by default but a separate signing context can be used to override
+// the default
 func (ctx *ObjectScaleSession) SendRawSigned(method string, path interface{}, query map[string]string, body interface{}, headers map[string]string, signingCtx *V4SignerContext) (*http.Response, error) {
 	var reqBody io.Reader
 	switch body.(type) {
@@ -247,11 +271,11 @@ func (ctx *ObjectScaleSession) SendRawSigned(method string, path interface{}, qu
 	if err != nil {
 		return nil, fmt.Errorf("[SendRawSgined] Request error: %v", err)
 	}
+	setHeaders(req, ctx, headers)
 	if signingCtx != nil {
-		setHeadersMinimal(req, ctx, headers)
 		signingCtx.V4SignRequest(req)
-	} else {
-		setHeaders(req, ctx, headers)
+	} else if ctx.SigningCtx != nil {
+		ctx.SigningCtx.V4SignRequest(req)
 	}
 	return ctx.Client.Do(req)
 }
@@ -269,7 +293,6 @@ func (ctx *ObjectScaleSession) Send(method string, path interface{}, query map[s
 // returned.
 func (ctx *ObjectScaleSession) SendSigned(method string, path interface{}, query map[string]string, body interface{}, headers map[string]string, signingCtx *V4SignerContext) (map[string]interface{}, error) {
 	jsonBody := make(map[string]interface{})
-
 	resp, err := ctx.SendRawSigned(method, path, query, body, headers, signingCtx)
 	if err != nil {
 		return nil, fmt.Errorf("[SendSigned] Error returned by SendRawSigned: %v", err)
@@ -299,7 +322,6 @@ func (ctx *ObjectScaleSession) SendSigned(method string, path interface{}, query
 	if len(rawBody) == 0 || rawBody == nil {
 		return nil, nil
 	}
-
 	if err := json.Unmarshal(rawBody, &jsonBody); err != nil {
 		return nil, fmt.Errorf("[SendSigned] Error unmarshaling JSON: %v\nRaw body: %s", err, rawBody)
 	}
@@ -318,27 +340,9 @@ func setHeaders(req *http.Request, ctx *ObjectScaleSession, headers map[string]s
 	}
 	defaultHeaders := map[string]string{
 		headerAccept:       acceptApplicationJSON,
-		headerSessionToken: ctx.SessionToken,
 	}
-	for k, v := range defaultHeaders {
-		if _, ok := req.Header[k]; !ok {
-			req.Header.Add(k, v)
-		}
-	}
-}
-
-// setHeadersMinimal sets the headers for a request appropriately
-// The function takes the request, ObjectScaleSession, and a map containing possible header key/value pairs
-// The function first overwrites any existing headers in the request with those supplied in the headers parameter
-// Only after this is done do we attempt to add in the session header. If these headers exist in the passed in
-// headers array, they are not overridden. The values in the passed in headers map take precedence
-func setHeadersMinimal(req *http.Request, ctx *ObjectScaleSession, headers map[string]string) {
-	for k, v := range headers {
-		// Manually set headers as we want to preserve the case sensitivity of each header
-		req.Header[k] = []string{v}
-	}
-	defaultHeaders := map[string]string{
-		headerAccept: acceptApplicationJSON,
+	if ctx.AuthType == "basic" {
+		defaultHeaders[headerSessionToken] = ctx.SessionToken
 	}
 	for k, v := range defaultHeaders {
 		if _, ok := req.Header[k]; !ok {
