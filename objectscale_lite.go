@@ -173,10 +173,8 @@ func (ctx *ObjectScaleSession) init() error {
 func (ctx *ObjectScaleSession) Connect() error {
 	// Cleanup any existing session before trying to connect
 	ctx.Disconnect()
-	// Automatically initialize the ObjectScaleSession if it is not already initialized
-	if ctx.Client == nil {
-		ctx.init()
-	}
+	// Automatically initialize the ObjectScaleSession
+	ctx.init()
 	if ctx.AuthType != "basic" {
 		// No connection or session token is required if the authentication type is IAM as each request is signed
 		return nil
