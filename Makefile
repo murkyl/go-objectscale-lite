@@ -22,4 +22,7 @@ fmt:
 lint:
 	golint
 
+readme:
+	goreadme -credit=false -title "go-objectscale-lite" > README.md
+
 .PHONY: build fmt lint
