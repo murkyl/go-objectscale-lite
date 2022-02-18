@@ -217,7 +217,7 @@ func CreateV4CanonicalURIString(req *http.Request) string {
 	return strings.Join(pathSegments[:], "/")
 }
 
-// GetV4DefaultSignedHeaders returns an array of compiles regular expressions that determine
+// GetV4DefaultSignedHeaders returns an array of compiled regular expressions that determine
 // if a header in an HTTP request should be included in the signed request
 func GetV4DefaultSignedHeaders() []*regexp.Regexp {
 	return []*regexp.Regexp{
